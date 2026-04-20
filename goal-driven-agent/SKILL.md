@@ -1,37 +1,43 @@
 ---
 name: goal-driven-agent
 description: >-
-  Goal-driven execution protocol with external-oracle improvement loop.
-  Phase 1: decompose + execute to baseline.
-  Phase 2: each round gets NEW external information (run tests, search web,
-  read papers), incorporate, keep if better else revert, stop when no new
-  info found. State in goal-state.md, checkpoints via git.
+  Goal-driven execution protocol with a bounded scout and external-oracle
+  improvement loop. Phase 1: decompose + execute to baseline. Phase 2: scout
+  the landscape once, build a problem map, then attack the weakest open problem
+  with external oracles until all meaningful problems are improved or saturated.
   Use when: "目标驱动", "GDA", "帮我拆解", "按目标执行".
 license: MIT
 ---
 
 # Goal-Driven Agent
 
-Read `~/.claude/skills/goal-driven-agent/references/examples.md` for worked examples.
+Read `references/examples.md` for worked examples.
 
-## Core principle
+## Core Principle
 
 Every IMPROVE round must bring in information the agent did not previously have.
-No new information = convergence = stop.
+No new information for a problem means that problem is saturated, not that the
+entire task is globally done.
+
 Agent self-evaluation is not an oracle. External processes are.
 
-## Two phases
+## Two Phases
 
-```
-Phase 1: EXECUTE  (get it working — baseline)
-Phase 2: IMPROVE  (get new info → incorporate → keep/revert → repeat)
+```text
+Phase 1: EXECUTE
+  Get a baseline that satisfies the explicit task.
+
+Phase 2: IMPROVE
+  Scout once -> build a problem map -> attack the weakest open problem ->
+  keep or saturate -> repeat -> stop when all meaningful problems are done
+  or saturated.
 ```
 
-## State file: goal-state.md
+## State File: goal-state.md
 
 Create at DECOMPOSE. Update at every transition. Read first on every turn.
 
-```
+```text
 phase: IMPROVE
 round: 3
 branch: gda/<tag>
@@ -39,21 +45,30 @@ best_commit: d4e5f6g
 oracle_type: test_runner | benchmark | linter | web_search | paper_read | code_read
 
 | id | goal | verify_cmd | expect | type | status |
-|----|------|-----------|--------|------|--------|
-| G1 | ... | `cmd` | `output` | hard | ✅ |
+|----|------|------------|--------|------|--------|
+| G1 | ...  | `cmd`      | ...    | hard | done   |
+
+## scout log
+- scan 1: broad checker/query -> what it revealed
+- scan 2: broad checker/query -> what it revealed
 
 ## problem map
-| rank | aspect | current | gap | status |
-|------|--------|---------|-----|--------|
-| 1 | coverage | 62% in auth | edge cases untested | done (round 1) |
-| 2 | lint | 2 warnings | unused import, any type | done (round 2) |
-| 3 | ... | ... | ... | open |
+| rank | aspect | current | gap | status | notes |
+|------|--------|---------|-----|--------|-------|
+| 1 | ... | ... | ... | open | why it is rank 1 |
+| 2 | ... | ... | ... | open | ... |
+| 3 | ... | ... | ... | saturated | round 4, no new info |
 
 ## improve log
-- round 1: new info = "3 edge cases pass, coverage 62%→82%" → keep [commit]
-- round 2: new info = "lint clean, 2→0 warnings" → keep [commit]
-- round 3: searched for auth module issues → nothing new → CONVERGED
+- round 1: target = "..."; new info = "..."; action = keep [commit]
+- round 2: target = "..."; new info = "none"; action = saturate
 ```
+
+Status values:
+- `open`: not yet attacked
+- `targeting`: current round
+- `done`: gap is materially closed
+- `saturated`: oracle produced no materially new information for this problem
 
 ---
 
@@ -61,15 +76,15 @@ oracle_type: test_runner | benchmark | linter | web_search | paper_read | code_r
 
 ### CLARIFY
 
-1. Restate task in one sentence.
+1. Restate the task in one sentence.
 2. List assumptions.
-3. Ambiguity → ask user. Clear → DECOMPOSE.
+3. If ambiguity is high, ask the user. If clear, DECOMPOSE.
 
 ### DECOMPOSE
 
 For each sub-goal:
 
-```
+```text
 G{n}: {what to do}
   expect_diff: {files that change}
   verify_cmd:  {one shell command}
@@ -78,199 +93,258 @@ G{n}: {what to do}
 ```
 
 Verify patterns:
-- **exitcode**: `cmd` → `$? = 0`
-- **numeric**: `cmd | extract` → `< threshold`
-- **string**: `cmd` → output contains `"X"`
+- `exitcode`: `cmd` -> `$? = 0`
+- `numeric`: `cmd | extract` -> threshold
+- `string`: `cmd` -> output contains `X`
 
-Setup: `git checkout -b gda/<tag>`. Write goal-state.md. Confirm with user.
+Setup:
+- `git checkout -b gda/<tag>`
+- write `goal-state.md`
+- confirm with user if needed
 
 ### EXECUTE
 
-```
-1. Print: ▶ G{n}: {goal}
+```text
+1. Print: G{n}: {goal}
 2. Do the work.
 3. git add -A && git commit -m "G{n}: {description}"
-4. {verify_cmd} > .gda-verify.log 2>&1; echo "EXIT:$?" >> .gda-verify.log
+4. Run {verify_cmd} and capture output.
 5. Judge.
-6. ✅ → next goal.  ❌ → REPLAN.
+6. PASS -> next goal. FAIL -> REPLAN.
 ```
 
 ### REPLAN
 
-```
-1. Read .gda-verify.log.
-2. Syntax/typo → fix, retry. (≤ 2)
-3. Logic error → analyze, fix, retry. (≤ 2)
-4. Retries exhausted → git reset --hard {best_commit}, different approach. (≤ 2 strategies)
-5. Strategies exhausted → BLOCKED. Report to user.
+```text
+1. Read the verification log.
+2. Syntax/typo -> fix, retry. (max 2)
+3. Logic error -> analyze, fix, retry. (max 2)
+4. Retries exhausted -> revert to best_commit and try a different approach. (max 2 strategies)
+5. Strategies exhausted -> BLOCKED. Report to user.
 ```
 
 ### BASELINE
 
-All goals ✅. Now determine: does this task have an external oracle?
+All goals done. Now determine whether an external oracle exists.
 
-```
-Oracle check:
+```text
+1. Can I run tests, benchmarks, linters, compilers, or other checkers that
+   produce outputs I cannot predict?
+   -> YES -> oracle_type = execution oracle -> Phase 2
 
-1. Can I run tests/benchmarks/linters that produce output I can't predict?
-   → YES → oracle_type = test_runner / benchmark / linter
-   → Go to Phase 2.
-
-2. Can I search the web / read papers / read codebases to find
-   information I don't currently have?
-   → YES → oracle_type = web_search / paper_read / code_read
-   → Go to Phase 2.
+2. Can I search the web, read papers, inspect codebases, or gather outside
+   evidence that I do not already have?
+   -> YES -> oracle_type = information oracle -> Phase 2
 
 3. Neither?
-   → No oracle. Phase 1 is the final result. Stop. Hand to user.
+   -> No oracle. Phase 1 is the final result. Stop.
 ```
 
 ---
 
 ## Phase 2: IMPROVE
 
-### The rule
+### The Rule
 
-**Every round MUST execute an external action that can return information the agent does not already have.** The external action is the oracle. Without it, the loop is self-talk.
+Every round must execute an external action that can return information the
+agent did not already have.
 
 Two oracle families:
 
-```
-Family A: EXECUTION oracles (for coding tasks)
-  The agent changes code. An external process judges.
-  Oracle examples:
-    - test suite: npm test → pass/fail count
-    - benchmark: bench.sh → latency number
-    - linter: eslint → warning count
-    - compiler: tsc → error count
-  Agent cannot fake these numbers.
+```text
+Family A: execution oracles
+  Examples:
+  - test suite
+  - benchmark
+  - linter
+  - compiler
 
-Family B: INFORMATION oracles (for research/analysis tasks)
-  The agent has a document. External sources provide new knowledge.
-  Oracle examples:
-    - web search → new articles, user feedback, data
-    - paper search → new research, methods, evidence
-    - codebase reading → new projects, implementations, patterns
-  Agent cannot invent these sources.
+Family B: information oracles
+  Examples:
+  - web search
+  - paper search
+  - codebase reading
+  - dataset inspection
 ```
 
-### IMPROVE loop — four steps
+### Why There Is A Scout Step
 
-```
-STEP 1: WIDE SCAN (once, bounded)
+Weakest-part optimization only works after you have a usable map of the space.
+Without that map, "weakest" is often just "most salient right now."
 
-  Run ALL available checkers / scan ALL aspects of the deliverable.
-  Budget: ≤ 3 oracle calls. Goal is breadth, not depth.
+But scout is not exhaustive research.
 
-  Family A (code):
-    npm test --coverage → coverage per module
-    eslint src/ → warning count
-    tsc --noEmit → error count
-    (run whichever apply, up to 3)
+Scout exists to:
+- discover the main dimensions of the problem
+- surface obvious blind spots
+- rank candidate weaknesses
 
-  Family B (research):
-    scan each section of the document for:
-      → Claims with no external evidence
-      → Aspects with shallow coverage
-      → Missing perspectives or counterarguments
-    (do NOT search yet — just list weaknesses)
+Scout does not exist to:
+- collect everything
+- read every source
+- fully solve the task before ranking
 
-STEP 2: PROBLEM MAP
+Rule: `Scout for map, not for completeness.`
 
-  Rank all weaknesses found in Step 1 by severity.
-  Write to goal-state.md:
+### Step 1: SCOUT ONCE, WITH A BUDGET
 
-  ## problem map
-  | rank | aspect | current | gap | status |
-  |------|--------|---------|-----|--------|
-  | 1 | {worst} | {metric/description} | {what's missing} | open |
-  | 2 | ... | ... | ... | open |
-  | 3 | ... | ... | ... | open |
+Run a bounded breadth-first sweep. Budget: at most 3 broad oracle calls.
 
-  This is the attack order. Always target rank 1 first.
+Family A:
+- Run the broadest checkers that expose the shape of the problem.
+- Typical set: tests, coverage, linter, compiler, benchmark.
+- Use up to 3 that give the widest picture.
 
-STEP 3: WEAKEST-PART LOOP (max 10 rounds)
+Family B:
+- First do an internal scan of the current deliverable:
+  - claims with no evidence
+  - shallow sections
+  - missing counterarguments
+  - missing comparable systems
+- Then do up to 3 broad external queries to map the space.
 
-  For each round:
+Good scout queries are broad and structural, for example:
+- timeline / history / canonical overview
+- limitations / criticism / failures
+- comparable systems / alternative approaches
 
-  1. READ goal-state.md. Pick the highest-ranked OPEN problem.
+Do not try to exhaust the literature in scout.
 
-  2. GO GET NEW INFORMATION (the oracle call):
+### Step 2: BUILD THE PROBLEM MAP
 
-     Family A: make a change, then run the checker.
-       → The checker result IS the new information.
-       → Example: add tests → npm test → coverage now 78%
+Rank the most important weaknesses found in scout.
 
-     Family B: search externally for info about this problem.
-       → The search result IS the new information.
-       → Example: search "deep research user complaints" → find Reddit thread
+Write to `goal-state.md`:
 
-  3. DID YOU GET NEW INFORMATION?
-
-     → YES (found something agent didn't know before):
-       Incorporate into deliverable.
-       git add -A && git commit -m "improve round {n}: {what was found}"
-       Update best_commit in goal-state.md.
-       Mark this problem DONE in problem map. Re-rank remaining.
-       Print: ✅ Round {n}: new info = "{summary}" [commit]
-       Continue to next round (target new rank-1 problem).
-
-     → NO (oracle returned nothing new):
-       git reset --hard {best_commit} (if changes were made).
-       Print: ↩️ Round {n}: no new info for "{target}"
-       → Go to STEP 4.
-
-STEP 4: STOP
-
-  The FIRST time the current weakest problem yields no new information,
-  the loop stops. Rationale: if the weakest part can't be improved
-  with external info, weaker parts won't fare better.
-
-  Do NOT try the next problem. Do NOT keep searching.
-  → CONVERGED.
+```text
+## problem map
+| rank | aspect | current | gap | status | notes |
+|------|--------|---------|-----|--------|-------|
+| 1 | {worst} | {metric/description} | {what is missing} | open | {why now} |
+| 2 | ... | ... | ... | open | ... |
+| 3 | ... | ... | ... | open | ... |
 ```
 
-### Key: what counts as "new information"
+Ranking heuristics:
+- severity: how much this weakens the deliverable
+- tractability: whether an oracle can realistically improve it
+- leverage: whether fixing it changes multiple downstream sections
 
-```
-IS new information:
-  - A fact, data point, or source the agent didn't have before
-  - A test result that changed after a code modification
-  - A benchmark number from running actual code
-  - A real user quote, paper finding, or project example found via search
-  - A counterexample or edge case revealed by a checker
+Default attack order: highest severity first.
+Override only if the top item is clearly blocked and the reason is explicit.
 
-IS NOT new information:
-  - Agent rephrasing existing content
-  - Agent "deciding" the score is higher
-  - Agent reorganizing sections
-  - Agent adding commentary without new sources
-  - Agent running the same test without changing code
+### Step 3: WEAKEST-PART LOOP
+
+Maximum 10 rounds unless the user requests more.
+
+For each round:
+
+```text
+1. Read goal-state.md.
+2. Pick the highest-ranked OPEN problem.
+3. Mark it TARGETING.
+4. Run one focused oracle call against that problem.
+5. Judge the result.
 ```
+
+Focused oracle calls:
+
+Family A:
+- make one targeted change
+- run the checker that measures that problem
+- the changed checker output is the new information
+
+Family B:
+- search externally for evidence specific to that problem
+- the found source, fact, quote, counterexample, or comparison is the new information
+
+### Step 4: JUDGE THE ROUND
+
+If the oracle produced materially new information:
+
+```text
+1. Incorporate it.
+2. git add -A && git commit -m "improve round {n}: {what was found}"
+3. Update best_commit.
+4. Re-check the affected problem.
+5. If the gap is materially closed -> mark DONE.
+6. If the gap is smaller but still important -> keep it OPEN and re-rank.
+7. Continue.
+```
+
+If the oracle produced no materially new information:
+
+```text
+1. Revert to best_commit if needed.
+2. Mark this problem SATURATED.
+3. Record why it saturated.
+4. Continue to the next OPEN problem.
+```
+
+One miss does not stop the whole loop.
+It only stops work on that problem.
+
+### Step 5: STOP
+
+Stop when any of these is true:
+
+```text
+1. All meaningful problems are DONE or SATURATED.
+2. A confirmation re-scan finds no newly rankable problem.
+3. Max rounds reached.
+4. User interrupts.
+```
+
+Do not stop merely because one problem saturated.
+Do stop when the map itself has stopped yielding actionable open problems.
+
+### What Counts As New Information
+
+New information:
+- a fact, data point, or source the agent did not have before
+- a changed test, benchmark, lint, or compile result
+- a newly discovered counterexample
+- a real user report, paper finding, implementation pattern, or dataset fact
+- a source that materially changes confidence, ranking, or design
+
+Not new information:
+- rephrasing existing text
+- subjective rescoring by the agent
+- reorganizing sections without new evidence
+- searching and finding only what the document already said
+- rerunning the same checker without a targeted change
 
 ### CONVERGED
 
-```
 Print:
-  ## GDA Complete
-  Phase 1: {n} goals, all ✅
-  Phase 2: {m} improve rounds ({keeps} keeps, {final_miss} miss → stop)
-  Oracle type: {type}
 
-  Problem map:
-  | rank | aspect | result |
-  |------|--------|--------|
-  | 1 | ... | ✅ improved (round X) |
-  | 2 | ... | ✅ improved (round Y) |
-  | 3 | ... | ↩️ no new info → stop |
-  | 4 | ... | — (not reached) |
+```text
+## GDA Complete
+Phase 1: {n} goals, all done
+Phase 2: {m} rounds
+Oracle type: {type}
 
-  New information incorporated:
-  - Round 1: {what was found}
-  - Round 2: {what was found}
-  - ...
+Scout summary:
+- scan 1: ...
+- scan 2: ...
+- scan 3: ...
 
-  Human review needed: {list}
+Problem map outcome:
+| rank | aspect | result |
+|------|--------|--------|
+| 1 | ... | done (round X) |
+| 2 | ... | saturated (round Y) |
+| 3 | ... | done (round Z) |
+
+New information incorporated:
+- round 1: ...
+- round 2: ...
+
+Saturated problems:
+- ...
+
+Human review needed:
+- ...
 ```
 
-Update goal-state.md. Done.
+Update `goal-state.md`. Done.
