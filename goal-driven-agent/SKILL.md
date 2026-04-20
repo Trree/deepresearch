@@ -42,10 +42,17 @@ oracle_type: test_runner | benchmark | linter | web_search | paper_read | code_r
 |----|------|-----------|--------|------|--------|
 | G1 | ... | `cmd` | `output` | hard | ✅ |
 
+## problem map
+| rank | aspect | current | gap | status |
+|------|--------|---------|-----|--------|
+| 1 | coverage | 62% in auth | edge cases untested | done (round 1) |
+| 2 | lint | 2 warnings | unused import, any type | done (round 2) |
+| 3 | ... | ... | ... | open |
+
 ## improve log
-- round 1: new info = "Reddit thread: users report missing sources" → added to limitations → keep [commit]
-- round 2: new info = "found Agent-E framework" → added comparison → keep [commit]
-- round 3: searched 3 queries, nothing new → converged
+- round 1: new info = "3 edge cases pass, coverage 62%→82%" → keep [commit]
+- round 2: new info = "lint clean, 2→0 warnings" → keep [commit]
+- round 3: searched for auth module issues → nothing new → CONVERGED
 ```
 
 ---
@@ -147,55 +154,80 @@ Family B: INFORMATION oracles (for research/analysis tasks)
   Agent cannot invent these sources.
 ```
 
-### IMPROVE loop
+### IMPROVE loop — four steps
 
 ```
-LOOP (max 10 rounds):
+STEP 1: WIDE SCAN (once, bounded)
 
-  1. READ goal-state.md. Recover context.
+  Run ALL available checkers / scan ALL aspects of the deliverable.
+  Budget: ≤ 3 oracle calls. Goal is breadth, not depth.
 
-  2. FIND WEAKEST PART of current deliverable:
+  Family A (code):
+    npm test --coverage → coverage per module
+    eslint src/ → warning count
+    tsc --noEmit → error count
+    (run whichever apply, up to 3)
 
-     Family A (code): run all checkers.
-       → Pick the checker with worst result.
-       → Example: "coverage lowest at 62% in auth module"
+  Family B (research):
+    scan each section of the document for:
+      → Claims with no external evidence
+      → Aspects with shallow coverage
+      → Missing perspectives or counterarguments
+    (do NOT search yet — just list weaknesses)
 
-     Family B (research): scan document for:
-       → Claims with no external evidence
-       → Aspects with shallow coverage
-       → Missing perspectives or counterarguments
-       → Example: "limitation analysis has no real user feedback"
+STEP 2: PROBLEM MAP
 
-  3. GO GET NEW INFORMATION (the oracle call):
+  Rank all weaknesses found in Step 1 by severity.
+  Write to goal-state.md:
+
+  ## problem map
+  | rank | aspect | current | gap | status |
+  |------|--------|---------|-----|--------|
+  | 1 | {worst} | {metric/description} | {what's missing} | open |
+  | 2 | ... | ... | ... | open |
+  | 3 | ... | ... | ... | open |
+
+  This is the attack order. Always target rank 1 first.
+
+STEP 3: WEAKEST-PART LOOP (max 10 rounds)
+
+  For each round:
+
+  1. READ goal-state.md. Pick the highest-ranked OPEN problem.
+
+  2. GO GET NEW INFORMATION (the oracle call):
 
      Family A: make a change, then run the checker.
        → The checker result IS the new information.
        → Example: add tests → npm test → coverage now 78%
 
-     Family B: search externally for info about the weakest part.
+     Family B: search externally for info about this problem.
        → The search result IS the new information.
        → Example: search "deep research user complaints" → find Reddit thread
 
-  4. DID YOU GET NEW INFORMATION?
+  3. DID YOU GET NEW INFORMATION?
 
      → YES (found something agent didn't know before):
        Incorporate into deliverable.
        git add -A && git commit -m "improve round {n}: {what was found}"
-       Update goal-state.md.
-       Print: ✅ Round {n}: new info = "{summary}" → incorporated [commit]
-       Go to 1.
+       Update best_commit in goal-state.md.
+       Mark this problem DONE in problem map. Re-rank remaining.
+       Print: ✅ Round {n}: new info = "{summary}" [commit]
+       Continue to next round (target new rank-1 problem).
 
-     → NO (search returned nothing new / checker didn't improve):
+     → NO (oracle returned nothing new):
        git reset --hard {best_commit} (if changes were made).
-       Print: ↩️ Round {n}: no new information for "{target}"
-       Mark this aspect as SATURATED.
-       Try next weakest part.
-       If ALL aspects saturated → CONVERGED.
+       Print: ↩️ Round {n}: no new info for "{target}"
+       → Go to STEP 4.
 
-  5. CONVERGE CHECK:
-     All aspects saturated → stop.
-     OR max rounds reached → stop.
-     OR user interrupts → stop.
+STEP 4: STOP
+
+  The FIRST time the current weakest problem yields no new information,
+  the loop stops. Rationale: if the weakest part can't be improved
+  with external info, weaker parts won't fare better.
+
+  Do NOT try the next problem. Do NOT keep searching.
+  → CONVERGED.
 ```
 
 ### Key: what counts as "new information"
@@ -222,17 +254,21 @@ IS NOT new information:
 Print:
   ## GDA Complete
   Phase 1: {n} goals, all ✅
-  Phase 2: {m} improve rounds ({keeps} keeps, {reverts} reverts, {saturated} saturated)
+  Phase 2: {m} improve rounds ({keeps} keeps, {final_miss} miss → stop)
   Oracle type: {type}
+
+  Problem map:
+  | rank | aspect | result |
+  |------|--------|--------|
+  | 1 | ... | ✅ improved (round X) |
+  | 2 | ... | ✅ improved (round Y) |
+  | 3 | ... | ↩️ no new info → stop |
+  | 4 | ... | — (not reached) |
 
   New information incorporated:
   - Round 1: {what was found}
   - Round 2: {what was found}
   - ...
-
-  Saturated aspects (no more new info available):
-  - {aspect 1}
-  - {aspect 2}
 
   Human review needed: {list}
 ```
