@@ -1,6 +1,6 @@
 # Examples
 
-## Example 1: Coding task with scout and saturation
+## Example 1: Coding task — round 1 runs all checkers, then loop
 
 User: "Fix the login bug where an empty email crashes the app."
 
@@ -21,53 +21,41 @@ tests and lints can produce outputs the agent cannot predict
 ### Phase 2: IMPROVE
 
 ```text
-STEP 1: SCOUT
-  - npm test --coverage -> auth/register.ts coverage 45%
-  - eslint src/auth/ -> 2 warnings
-  - tsc --noEmit -> 0 errors
-
-STEP 2: PROBLEM MAP
-  | rank | aspect   | current | gap                  | status | notes          |
-  |------|----------|---------|----------------------|--------|----------------|
-  | 1    | coverage | 45%     | edge cases untested  | open   | highest risk   |
-  | 2    | lint     | 2 warn  | any + unused import  | open   | easy cleanup   |
-
-STEP 3: LOOP
-
-Round 1:
-  target = coverage
-  oracle call = add 3 edge-case tests -> rerun coverage
-  new info = coverage 45% -> 82%
-  action = keep
-  status = done
+Round 1 (all checkers first):
+  oracle calls:
+    - npm test --coverage -> auth/register.ts coverage 45%
+    - eslint src/auth/   -> 2 warnings (unused import, any type)
+    - tsc --noEmit       -> 0 errors
+  sorted worst-first: coverage 45% > lint 2 warnings > tsc 0 errors
+  target: "coverage 45% in auth module"
+  oracle_call: "add 3 edge-case tests -> npm test --coverage"
+  new_info: "coverage 45% -> 82%, 3 edge cases pass"
+  action: keep [commit abc1234]
+  next_constraint: none
 
 Round 2:
-  target = lint
-  oracle call = fix warnings -> rerun eslint
-  new info = warnings 2 -> 0
-  action = keep
-  status = done
+  target: "lint 2 warnings"
+  oracle_call: "fix unused import + any type -> eslint"
+  new_info: "warnings 2 -> 0"
+  action: keep [commit def5678]
+  next_constraint: none
 
 Round 3:
-  confirmation re-scan
-  - coverage still 82%; remaining uncovered lines are generated code
-  - eslint 0
-  - tsc 0
-  no newly rankable problem
-  -> stop
+  rescan: coverage 82% (remaining = generated code), eslint 0, tsc 0
+  no actionable target -> stop
 ```
 
-## Example 2: Research task with broad scout first
+## Example 2: Research task — round 1 scans all aspects
 
 User: "What should the next generation of deep research systems look like?"
 
 ### Phase 1: EXECUTE
 
 ```text
-G1: summarize current products     -> heading exists
-G2: extract recurring patterns     -> heading exists
-G3: propose next-gen architecture  -> heading exists
-G4: produce a final report         -> conclusion exists
+G1: summarize current products     -> wc -l > 20 ✓
+G2: extract recurring patterns     -> grep "## Patterns" ✓
+G3: propose next-gen architecture  -> grep "## Architecture" ✓
+G4: produce a final report         -> grep "## Conclusion" ✓
 BASELINE reached.
 
 Oracle check:
@@ -79,92 +67,146 @@ web search and paper search can produce new evidence
 ### Phase 2: IMPROVE
 
 ```text
-STEP 1: SCOUT
-  internal scan:
-  - current-state section lacks user evidence
-  - patterns section has too few comparables
-  - architecture section lacks failure modes
-
-  broad query 1: "deep research product overview 2025 2026"
-  -> confirms main players and feature surface
-
-  broad query 2: "deep research limitations criticism user feedback"
-  -> suggests reliability and citation quality are recurring complaints
-
-  broad query 3: "autonomous research agent frameworks papers"
-  -> surfaces comparable frameworks outside the product layer
-
-STEP 2: PROBLEM MAP
-  | rank | aspect            | current         | gap                         | status | notes              |
-  |------|-------------------|-----------------|-----------------------------|--------|--------------------|
-  | 1    | user evidence     | mostly inference| lacks real reports          | open   | high credibility   |
-  | 2    | comparables        | too narrow      | missing adjacent frameworks | open   | high leverage      |
-  | 3    | failure analysis   | thin            | no failure taxonomy         | open   | important for trust|
-
-STEP 3: LOOP
-
-Round 1:
-  target = user evidence
-  oracle call = focused search for user reports
-  new info = 2 real reports about missing sources and inconsistency
-  action = keep
-  status = done
+Round 1 (scan all aspects first):
+  internal scan of deliverable:
+    - current-state section lacks user evidence
+    - patterns section has too few comparables (only 2)
+    - architecture section lacks failure modes
+    - no counterarguments anywhere
+  broad queries:
+    - "deep research product overview 2025 2026" -> confirms main players
+    - "deep research limitations criticism user feedback" -> reliability and citation quality are recurring complaints
+    - "autonomous research agent frameworks papers" -> surfaces 3 comparable frameworks
+  sorted worst-first: user evidence (none) > comparables (too few) > failure modes (none)
+  target: "no user evidence"
+  oracle_call: search "deep research user experience reports problems"
+  new_info: 2 real user reports about missing sources and hallucinated citations
+  action: keep [commit aaa1111]
+  next_constraint: none
 
 Round 2:
-  target = comparables
-  oracle call = focused search for related frameworks
-  new info = 3 external frameworks with similar loops
-  action = keep
-  status = done
+  target: "too few comparables"
+  oracle_call: search "research agent framework architecture comparison"
+  new_info: 3 external frameworks (STORM, chain-of-research, autoresearch) with loop structures
+  action: keep [commit bbb2222]
+  next_constraint: none
 
 Round 3:
-  target = failure analysis
-  oracle call = focused search for reward hacking / failure cases
-  new info = paper with concrete failure modes
-  action = keep
-  status = done
+  consistency check triggered (every 3 rounds, information oracle):
+    re-read full deliverable
+    contradiction found: report claims "all products use single-pass generation"
+      but round 2 added frameworks that use iterative loops
+    -> resolving contradiction becomes next target
+  target: "contradictory claim about generation approach"
+  oracle_call: search "deep research iterative vs single pass architecture"
+  new_info: primary source (official docs) confirms iterative approach in 3 of 5 products
+  evidence classification: primary > anecdotal (original claim was from a blog post)
+  -> fix deliverable to reflect iterative approach
+  action: keep [commit ccc3333]
+  next_constraint: none
 
 Round 4:
-  confirmation re-scan
-  no newly rankable open problem
-  -> stop
+  target: "no failure modes"
+  oracle_call: search "autonomous research agent failure taxonomy reward hacking"
+  new_info: paper with 4 concrete failure modes (confirmation bias, source fabrication, loop divergence, reward hacking)
+  action: keep [commit ddd4444]
+  next_constraint: none
+
+Round 5:
+  rescan: all identified gaps now have evidence
+  no actionable target -> stop
 ```
 
-## Example 3: Saturating one problem does not stop everything
+Key points in this example:
+- Round 1 scans ALL aspects before picking a target
+- Round 3 shows consistency check triggering at the 3-round mark
+- Evidence tiebreaker resolves the contradiction (primary > anecdotal)
+- Phase 1 verify_cmd checks existence only (`wc -l`, `grep`), not quality
+
+## Example 3: Forced switch + miss then rescan finds another target
 
 User: "Improve this benchmark report."
 
 ```text
-SCOUT -> problem map
-  1. missing competitor data
-  2. weak methodology section
-  3. missing limitations
+Round 1 (all checkers first):
+  internal scan:
+    - missing competitor data
+    - weak methodology section
+    - missing limitations
+  sorted worst-first: competitor data > methodology > limitations
+  target: "missing competitor data"
+  oracle_call: search for public benchmark data on competitors
+  new_info: none — no trustworthy public benchmark found
+  action: miss
+  next_constraint: must not target "missing competitor data" next round
 
-Round 1:
-  target = missing competitor data
-  search -> no trustworthy public benchmark found
-  action = mark saturated
+  fresh rescan: methodology and limitations are still actionable
+  -> continue
 
 Round 2:
-  target = weak methodology section
-  search -> finds official benchmark protocol
-  action = keep, mark done
+  forced-switch active: cannot target "missing competitor data"
+  target: "weak methodology section"
+  oracle_call: search "standard benchmark methodology protocol"
+  new_info: official benchmark protocol document found
+  action: keep [commit eee5555]
+  next_constraint: none
 
 Round 3:
-  target = missing limitations
-  search -> finds two known caveats from vendor docs
-  action = keep, mark done
+  target: "missing limitations"
+  oracle_call: search "benchmark comparison caveats known issues"
+  new_info: 2 known caveats from vendor docs
+  action: keep [commit fff6666]
+  next_constraint: none
 
 Round 4:
-  re-scan -> no newly rankable problem
-  stop
+  target: "missing competitor data" (forced-switch expired, re-eligible)
+  oracle_call: search with different query strategy "competitor performance claims press release"
+  new_info: vendor press release with partial benchmark numbers
+  action: keep [commit ggg7777]
+  next_constraint: none
+
+Round 5:
+  rescan: no actionable target -> stop
+```
+
+Key points:
+- Round 1 miss triggers forced switch (cannot re-target immediately)
+- After the miss, fresh rescan confirms other targets exist -> continue
+- Round 4: the previously missed target becomes attackable again with new angle
+- Forced switch is temporary — a missed target can be re-attacked later with a new angle
+
+## Example 4: Miss then rescan finds NO other target -> stop
+
+User: "Polish this CLI help text."
+
+```text
+Round 1 (all checkers first):
+  - wc -l -> 45 lines, reasonable
+  - grep for inconsistent flags -> 1 inconsistency found
+  - spell check -> 0 typos
+  target: "inconsistent flag format"
+  oracle_call: fix --verbose vs -verbose -> run help formatter
+  new_info: formatter now shows consistent output
+  action: keep [commit hhh8888]
+  next_constraint: none
+
+Round 2:
+  rescan: no obvious issue
+  target: "could add examples section"
+  oracle_call: check similar CLIs for example patterns -> search
+  new_info: none — help text already follows standard conventions
+  action: miss
+  next_constraint: must not target "examples section" next round
+
+  fresh rescan: no actionable target OTHER THAN "examples section"
+  -> stop
 ```
 
 Key point:
-one miss saturates one problem.
-It does not imply global convergence.
+- After a miss, rescan finds nothing else actionable -> immediate stop
+- No wasted rounds cycling through dead targets
 
-## Example 4: No oracle, so stop at Phase 1
+## Example 5: No oracle, so stop at Phase 1
 
 User: "Refactor this auth module into smaller functions."
 
@@ -193,7 +235,9 @@ agent edits -> agent scores -> agent says "better" -> repeat
 Good loop:
 
 ```text
-scout -> problem map -> focused oracle call -> keep or saturate -> re-rank -> stop
+round 1: run all checkers -> sort worst-first ->
+  focused oracle call -> keep or forced-switch ->
+  rescan after miss -> stop when nothing actionable
 ```
 
 The test is simple:
@@ -204,4 +248,4 @@ or checker output it did not contain before?
 ```
 
 If yes, the round was real.
-If no, the current problem is saturated.
+If no, forced switch — and if nothing else to target, stop.
