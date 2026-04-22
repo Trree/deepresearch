@@ -188,6 +188,24 @@ Maximum 10 rounds unless the user specifies a different budget.
 **Round 1 rule**: run ALL available checkers / scan ALL aspects before making
 any changes. Sort results worst-first. Pick the top as the first target.
 
+Default scan dimensions:
+
+```text
+Family A (execution oracle):
+  - correctness: run tests
+  - coverage: run coverage tool
+  - lint / style: run linter
+  - type safety: run type checker
+  - performance: run benchmark (if exists)
+
+Family B (information oracle):
+  - evidence: do key claims have hard sources?
+  - counter: are opposing views / counterexamples covered?
+  - boundary: are limitations and non-applicable scenarios stated?
+  - consistency: do all sections agree with each other?
+  - coverage: is any obvious dimension missing?
+```
+
 For each round:
 
 ```text
@@ -230,9 +248,12 @@ If the oracle produced no materially new information:
 1. Revert to best_commit if needed.
 2. Log: action = miss
 3. Log: next_constraint = must not target "{problem}" next round
-4. Do a fresh rescan of the deliverable.
-5. If no actionable target exists OTHER THAN last_miss_target -> stop.
-6. Otherwise continue with the next best target.
+4. If the information objectively does not exist (not just hard to find),
+   mark the gap explicitly in the deliverable. The reader should see
+   what is missing and why, rather than silent omission.
+5. Do a fresh rescan of the deliverable.
+6. If no actionable target exists OTHER THAN last_miss_target -> stop.
+7. Otherwise continue with the next best target.
 ```
 
 ### Forced Switch
@@ -265,6 +286,13 @@ Classify evidence as:
   benchmark  - reproducible experiment result, public benchmark
   vendor     - vendor white paper, product announcement, corporate blog
   anecdotal  - forum post, blog opinion, social media
+
+Concrete source mapping:
+  primary   → peer-reviewed paper, official docs, GitHub Release Notes,
+              raw dataset, SEC/regulatory filings
+  benchmark → reproducible experiment, public leaderboard, official benchmark
+  vendor    → white paper, product announcement, founder tweet, corporate blog
+  anecdotal → Reddit, forum post, personal blog, social media, 知乎
 
 When claims contradict, prefer higher-trust evidence.
 This is not a gate — all evidence enters. It is a tiebreaker

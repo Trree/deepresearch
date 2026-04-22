@@ -21,11 +21,12 @@ tests and lints can produce outputs the agent cannot predict
 ### Phase 2: IMPROVE
 
 ```text
-Round 1 (all checkers first):
+Round 1 (scan by dimension):
   oracle calls:
-    - npm test --coverage -> auth/register.ts coverage 45%
-    - eslint src/auth/   -> 2 warnings (unused import, any type)
-    - tsc --noEmit       -> 0 errors
+    - [correctness] npm test -> all pass
+    - [coverage] npm test --coverage -> auth/register.ts coverage 45%
+    - [lint] eslint src/auth/ -> 2 warnings (unused import, any type)
+    - [type safety] tsc --noEmit -> 0 errors
   sorted worst-first: coverage 45% > lint 2 warnings > tsc 0 errors
   target: "coverage 45% in auth module"
   oracle_call: "add 3 edge-case tests -> npm test --coverage"
@@ -67,12 +68,12 @@ web search and paper search can produce new evidence
 ### Phase 2: IMPROVE
 
 ```text
-Round 1 (scan all aspects first):
+Round 1 (scan by dimension):
   internal scan of deliverable:
-    - current-state section lacks user evidence
-    - patterns section has too few comparables (only 2)
-    - architecture section lacks failure modes
-    - no counterarguments anywhere
+    - [evidence] current-state section lacks user evidence
+    - [coverage] patterns section has too few comparables (only 2)
+    - [boundary] architecture section lacks failure modes
+    - [counter] no counterarguments anywhere
   broad queries:
     - "deep research product overview 2025 2026" -> confirms main players
     - "deep research limitations criticism user feedback" -> reliability and citation quality are recurring complaints
@@ -128,17 +129,20 @@ Key points in this example:
 User: "Improve this benchmark report."
 
 ```text
-Round 1 (all checkers first):
+Round 1 (scan by dimension):
   internal scan:
-    - missing competitor data
-    - weak methodology section
-    - missing limitations
+    - [evidence] missing competitor data
+    - [boundary] weak methodology section
+    - [boundary] missing limitations
   sorted worst-first: competitor data > methodology > limitations
   target: "missing competitor data"
   oracle_call: search for public benchmark data on competitors
   new_info: none — no trustworthy public benchmark found
   action: miss
   next_constraint: must not target "missing competitor data" next round
+  gap marked in deliverable: "## Competitor Benchmarks\n> Data gap: no trustworthy
+    public benchmark found as of this date. Numbers below are partial,
+    sourced from vendor press releases only."
 
   fresh rescan: methodology and limitations are still actionable
   -> continue
@@ -171,6 +175,7 @@ Round 5:
 
 Key points:
 - Round 1 miss triggers forced switch (cannot re-target immediately)
+- Miss explicitly marks the gap in the deliverable (reader sees what's missing and why)
 - After the miss, fresh rescan confirms other targets exist -> continue
 - Round 4: the previously missed target becomes attackable again with new angle
 - Forced switch is temporary — a missed target can be re-attacked later with a new angle
